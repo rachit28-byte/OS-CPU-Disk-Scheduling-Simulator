@@ -1,227 +1,206 @@
-# Comprehensive OS Scheduler & Disk Simulator
+# CPU and Disk Scheduling Algorithm Simulator
 
-A Java Swing desktop application that simulates classic **Operating System CPU scheduling algorithms**, **real-time scheduling algorithms**, and **disk scheduling algorithms**, with live visualizations (Gantt charts, progress bars, and XY line charts).
+A Java Swing desktop application for exploring CPU and disk scheduling. The CPU
+module accepts process data and shows scheduling results as a table/Gantt chart
+or progress bars. The disk module animates disk-head requests on a chart.
 
+## Problem statement
 
-![Main Dashboard](os-main-dashboard.png)
+Operating systems use scheduling policies to decide which process or disk
+request is served next. Comparing policies by hand can make their ordering and
+timing difficult to follow. This project provides a visual, interactive way to
+enter CPU process data and observe a simulated schedule, and to view disk-head
+movement for generated requests.
 
----
+## Objectives
 
-## Table of Contents
+- Provide a graphical interface for selecting CPU or disk scheduling.
+- Collect CPU process attributes and display calculated timing results.
+- Visualize CPU execution with a Gantt-style table or progress bars.
+- Animate disk requests and head movement with a JFreeChart chart.
+- Keep the implementation accessible as a small Java project without a build
+  system.
 
-- [Overview](#overview)
-- [Features](#features)
-- [Algorithms Implemented](#algorithms-implemented)
-- [Architecture](#architecture)
-- [File-by-File Breakdown](#file-by-file-breakdown)
-- [Application Flow](#application-flow)
-- [Getting Started](#getting-started)
-- [Known Issues & Limitations](#known-issues--limitations)
-- [Possible Improvements](#possible-improvements)
+## Features and algorithms
 
----
+### CPU scheduling
 
-## Overview
+The CPU results view in `Table.java` implements:
 
-The project provides an interactive GUI (built with **Java Swing**) that lets a user:
+- **FCFS (First-Come, First-Served):** non-preemptive; selects the arrived
+  process with the earliest arrival time.
+- **SJF (Shortest Job First):** non-preemptive; selects the shortest burst
+  among processes that have arrived.
+- **Priority:** non-preemptive; selects the lowest numeric priority among
+  arrived processes.
+- **Round Robin:** preemptive, with a fixed time quantum of 3; the results
+  scheduler adds processes to the ready queue as their arrival times are
+  reached.
 
-1. Choose a scheduling category — **Normal (CPU) Scheduling**, **Real-Time Scheduling**, or **Disk Scheduling**.
-2. Enter the number of processes/requests and their attributes (arrival time, burst time, priority, period, etc.).
-3. Run the selected algorithm and visualize the result as:
-   - A sortable results **table** (Process ID, Waiting Time, Turnaround Time, etc.) plus a colored **Gantt chart table**.
-   - Live **progress bars** per process that fill up in real time as each process "executes" (via `SwingWorker` + `Thread.sleep`, one tick per simulated time unit).
-   - For disk scheduling, a live-updating **XY line chart** (via JFreeChart) showing disk head movement across cylinders.
+The results view displays process start/completion times, waiting time,
+turnaround time, averages, and a per-time-unit Gantt chart. The separate
+progress-bar view also contains FCFS, SJF, Priority, and Round Robin execution
+paths; their arrival-time behavior is not equivalent to the results view
+(details are in [Known limitations](#known-limitations)).
 
-The simulation logic runs off the Swing Event Dispatch Thread using `SwingWorker`, so the UI remains responsive while the animation plays out.
+### Disk scheduling
 
----
+`DiskSchedulingSimulation.java` offers these options in its algorithm selector:
 
-## Features
+- **FCFS (First-Come, First-Served)**
+- **SSTF (Shortest Seek Time First)**
+- **SCAN**
+- **C-SCAN**
+- **LOOK**
+- **C-LOOK**
 
-- **CPU Scheduling** (non real-time): FCFS, SJF, Priority, Round Robin
-- **Real-Time Scheduling**: Rate Monotonic Scheduling (RMS), Earliest Deadline First (EDF)
-- **Disk Scheduling**: FCFS, SSTF, SCAN, C-SCAN, LOOK, C-LOOK (algorithm selector wired up; see [Known Issues](#known-issues--limitations) for simulation accuracy notes)
-- Dynamic, per-process input forms that adapt their fields based on the selected algorithm (e.g., Round Robin doesn't ask for arrival time input, Priority/EDF/RMS ask for an extra numeric field)
-- Two visualization modes for CPU/real-time results:
-  - **Table view** — final computed metrics + a cell-colored Gantt chart (`Table.java`, `Execution.java`)
-  - **Progress Bar view** — animated, real-time execution simulation (`ProgressBar.java`)
-- Randomized disk-request generation with a live animated chart of head movement (`DiskSchedulingSimulation.java`)
-- Background-thread execution via `SwingWorker` so the Swing UI thread never blocks during animated runs
+The simulation generates 20 requests in the cylinder range 0-199 and starts the
+head at cylinder 100. A JFreeChart line chart displays the generated request
+sequence over time.
 
----
+### Other source code
 
-## Algorithms Implemented
+The project also includes an RMS/EDF real-time scheduling screen and scheduler
+code in `RT_Scheduler.java` and `Execution.java`. This path is separate from the
+CPU and disk flows above and has limitations, including a continuously running
+simulation loop and a fixed-size Gantt chart.
 
-### CPU Scheduling (non-preemptive, single core)
-| Algorithm | Description | Where computed |
-|---|---|---|
-| **FCFS** (First-Come, First-Served) | Processes run in order of arrival time | `Table.java`, `ProgressBar.java` |
-| **SJF** (Shortest Job First) | Processes sorted and run by ascending burst time | `Table.java`, `ProgressBar.java` |
-| **Priority** | Processes sorted by arrival time then priority | `Table.java`, `ProgressBar.java` |
-| **Round Robin** | Fixed time quantum (`qt = 3`) cyclic execution with remaining-time bookkeeping | `Table.java`, `ProgressBar.java` |
+## Technologies
 
-### Real-Time Scheduling
-| Algorithm | Description | Where computed |
-|---|---|---|
-| **RMS** (Rate Monotonic Scheduling) | Processes sorted by ascending period; shorter-period tasks get higher priority | `Execution.java` |
-| **EDF** (Earliest Deadline First) | Processes sorted by ascending absolute deadline (`arrivalTime + period`) each cycle | `Execution.java` |
+- **Java** for the application and scheduling logic.
+- **Swing** for desktop windows, forms, tables, and progress bars.
+- **JFreeChart 1.5.6** for the disk-head movement chart. The project includes
+  `jfreechart-1.5.6.jar` in its root directory.
 
-Both are simulated as periodic tasks: after a process finishes its burst, `RealTimeProcess.reset()` advances its `deadline`/`nextStartTime` by one `period` and refills `remainingTime`.
+The project has no Maven or Gradle build file. Java source files use the
+default package and are compiled from the project root.
 
-### Disk Scheduling
-| Algorithm | Description |
-|---|---|
-| **FCFS** | Requests serviced in the (shuffled/random) order they arrive |
-| **SSTF** (Shortest Seek Time First) | Requests sorted by absolute distance from the current head position |
-| **SCAN** | Requests sorted ascending; head sweeps and reverses direction at the disk boundary |
-| **C-SCAN** | Circular SCAN variant (same sort, direction-reset logic simplified — see limitations) |
-| **LOOK / C-LOOK** | Same sorted ordering as SCAN/C-SCAN in the current implementation |
+## Project structure
 
-Requests are randomly generated (20 requests, cylinder range `0–199`, starting head position `100`) each time the algorithm dropdown changes, and the head movement is animated on a `javax.swing.Timer` (500 ms/tick) using a JFreeChart `XYSeriesCollection`.
-![Process Scheduler](os-process-scheduler.png)
-
----
-
-## Architecture
-
-The project has **no build tool** (no Maven/Gradle) and **no package declarations** — every class lives in the default package as a set of loose `.java` files meant to be compiled and run directly with `javac`/`java`.
-
-There is **no single unified entry point** used consistently: `Main.java` is the intended top-level launcher, but several classes (`Scheduler`, `RT_Scheduler`, `DiskSchedulingSimulation`, `ProgressBar`, `Execution`, `PriorityGui`, `main_interface`) each also carry their own `public static void main` for standalone testing/demo purposes.
-
-High-level flow for CPU/Real-Time scheduling:
-
-```
-Main (mode selector: Normal / Real-Time / Disk)
- ├─ Normal Schedule  → Scheduler (pick algorithm + process count)
- │                        → main_interface (collect per-process input)
- │                             → Console (choose Table or Progress Bar view)
- │                                  ├─ Table (static results + Gantt table)
- │                                  └─ ProgressBar (animated per-process bars)
- │
- ├─ Real-Time Schedule → RT_Scheduler (pick RMS/EDF + process count)
- │                          → main_interface (collect per-process input)
- │                               → Console (RealTimeProcess overload)
- │                                    └─ Execution (Gantt table, animated via SwingWorker)
- │
- └─ Disk Schedule → DiskSchedulingSimulation (self-contained: dropdown + live chart)
+```text
+.
+|-- Main.java                         # Application entry point and mode selector
+|-- Scheduler.java                    # CPU algorithm and process-count selection
+|-- main_interface.java               # CPU / real-time process input forms
+|-- Console.java                      # CPU / real-time visualization choices
+|-- Table.java                        # CPU metrics and Gantt chart
+|-- ProgressBar.java                  # Animated CPU progress bars
+|-- DiskSchedulingSimulation.java     # Disk request chart and algorithm selector
+|-- RT_Scheduler.java                 # Real-time algorithm selection
+|-- Execution.java                    # Real-time scheduling visualization
+|-- PriorityGui.java                  # Standalone legacy priority form
+|-- RealTimeSchedulingGUI.java        # Empty placeholder class
+|-- Task.java                         # Standalone task model, not wired into the UI
+|-- MIPS_ISA.java                     # Unrelated MIPS scratch/stub class
+|-- jfreechart-1.5.6.jar              # Disk chart dependency
+|-- os_background.jpeg                # Application background image
+|-- os-main-dashboard.png             # Dashboard screenshot
+|-- os-process-scheduler.png          # Process scheduler screenshot
+|-- os-process-scheduler-output.png   # Scheduling output screenshot
+|-- ProgressBar.png                   # Progress bar screenshot
+|-- schedule.png                      # Schedule screenshot
+|-- table.png                         # Table screenshot
+|-- textfield_color.png               # Form screenshot
 ```
 
-`main_interface` is shared by both the normal and real-time flows; it branches its field layout and the `Process`/`RealTimeProcess` object it constructs based on the `selectedItem` algorithm string passed in from `Scheduler`/`RT_Scheduler`.
+## Requirements
 
----
+- Windows
+- JDK 8 or later (the source uses Java 8 language features such as lambdas)
+- The included `jfreechart-1.5.6.jar` for compiling and running the disk
+  scheduling module
+- The image assets listed above are included in the project root. Several
+  windows use a machine-specific absolute path for the background image, so
+  that background may not appear on another computer.
 
-## File-by-File Breakdown
+## Compile and run on Windows
 
-| File | Role |
-|---|---|
-| **Main.java** | Top-level landing window. Lets the user pick "Normal Schedule", "Real_Time Schedule", or "Disk Schedule" and launches the corresponding flow. |
-| **Scheduler.java** | CPU-scheduling setup screen: slider for process count + dropdown for algorithm (FCFS/SJF/Priority/Round Robin). Launches `main_interface`. |
-| **RT_Scheduler.java** | Real-time scheduling setup screen: slider for process count + dropdown for algorithm (RMS/EDF). Launches `main_interface`. |
-| **main_interface.java** | Contains the `Process` domain class and the multi-step form that collects per-process attributes (duration, arrival time, priority/period) one process at a time, adapting its fields to the chosen algorithm. Builds a `List<Process>` or `List<RealTimeProcess>` and hands off to `Console`. |
-| **Console.java** | Intermediate screen offering "Table" or "Progress Bar" visualization; has two constructor overloads — one for `List<Process>` (CPU scheduling) and one for `List<RealTimeProcess>` (real-time scheduling). |
-| **Table.java** | Computes final scheduling metrics (waiting time, turnaround time, start/completion time) for FCFS/SJF/Priority/Round Robin and renders them in a `JTable`, plus a colored per-time-unit Gantt chart `JTable`. |
-| **ProgressBar.java** | Animates CPU scheduling in real time: a `JProgressBar` per process filled tick-by-tick on a background `SwingWorker` thread according to the selected algorithm (Round Robin/FCFS/SJF/Priority). |
-| **Execution.java** | Contains the `RealTimeProcess` domain class. Renders a process-attributes table and a colored Gantt-chart table for RMS/EDF, driven by a `SwingWorker` that simulates periodic task execution second-by-second. |
-| **DiskSchedulingSimulation.java** | Fully self-contained disk-scheduling demo: generates random disk requests, lets the user pick FCFS/SSTF/SCAN/C-SCAN/LOOK/C-LOOK from a dropdown, and animates head movement on a JFreeChart `XYSeriesCollection` via a `javax.swing.Timer`. |
-| **RT_Scheduler.java** | (see above) |
-| **PriorityGui.java** | Standalone/legacy multi-step input form for a priority-only workflow. Not wired into `Main`'s navigation flow — appears to be an earlier iteration superseded by `main_interface`. |
-| **RealTimeSchedulingGUI.java** | Empty placeholder class (`public class RealTimeSchedulingGUI {}`) — no functionality, unused. |
-| **Task.java** | A `Runnable` task model (name, period, execution time, deadline) intended for use with `ScheduledFuture`/`ScheduledExecutorService`-style periodic scheduling. Not currently referenced by any other class. |
-| **MIPS_ISA.java** | Unrelated scratch file — a tiny stub sketching a MIPS instruction-decode field set (`RegDst`, `ALuOp`, etc.) with a one-line `main`. Not part of the OS scheduler/disk simulator functionality. |
-| **os_background.jpeg** | Background image used by most screens. |
-| **ProgressBar.png, schedule.png, table.png, textfield_color.png** | Screenshots/reference images of the running application. |
-
----
-
-## Application Flow
-
-### 1. CPU Scheduling (Normal Schedule)
-1. `Main` → select "Normal Schedule" → `Scheduler`
-2. `Scheduler` → set process count (slider 0–10) + algorithm (FCFS/SJF/Priority/Round Robin) → `main_interface`
-3. `main_interface` → step through one form per process, collecting time duration, arrival time, and priority as applicable → `Console`
-4. `Console` → choose "Table" (static Gantt + metrics) or "Progress Bar" (live animation)
-
-### 2. Real-Time Scheduling
-1. `Main` → select "Real_Time Schedule" → `RT_Scheduler`
-2. `RT_Scheduler` → set process count + algorithm (RMS/EDF) → `main_interface`
-3. `main_interface` → step through one form per process, collecting duration, arrival time, and period → `Console` (real-time overload)
-4. `Console` → "Table" launches `Execution` (animated Gantt table); "Progress Bar" is present in the UI but not wired to an action in this flow.
-
-### 3. Disk Scheduling
-1. `Main` → select "Disk Schedule" → `DiskSchedulingSimulation` opens directly with a live chart and algorithm dropdown (no separate input step — requests are randomly generated).
-
----
-![Process Scheduler Output](os-process-scheduler-output.png)
-
-
-## Getting Started
-
-### Prerequisites
-- **JDK 8+** (uses `javax.swing`, standard library only, except for disk scheduling)
-- **JFreeChart** library (required only for `DiskSchedulingSimulation.java`) — download the JAR (e.g. `jfreechart-1.5.x.jar`, which also needs `jcommon`) and add it to your classpath.
-
-### Compiling & Running
-
-> There is no Maven/Gradle build file — compile the sources directly.
-
-From the project root, using PowerShell:
+Open PowerShell and change to the project root (the directory containing
+`Main.java` and `jfreechart-1.5.6.jar`):
 
 ```powershell
-# Compile everything (JFreeChart jar only needed if you plan to run the disk simulator)
-javac -cp ".;jfreechart-1.5.x.jar;jcommon-1.0.x.jar" *.java
+Set-Location "C:\path\to\OS-CPU-Disk-Scheduling-Simulator-main"
 
-# Run the full app starting from the main menu
-java -cp ".;jfreechart-1.5.x.jar;jcommon-1.0.x.jar" Main
+$sources = Get-ChildItem -Filter '*.java' | ForEach-Object { $_.Name }
+javac -cp ".;jfreechart-1.5.6.jar" $sources
 
-# Or run an individual module directly, e.g.:
-java -cp ".;jfreechart-1.5.x.jar;jcommon-1.0.x.jar" DiskSchedulingSimulation
-java -cp "." Scheduler
-java -cp "." RT_Scheduler
+java -cp ".;jfreechart-1.5.6.jar" Main
 ```
 
-### ⚠️ Before running: fix the hardcoded image path
+The main window lets you choose Normal Schedule, Real_Time Schedule, or Disk
+Schedule. To launch the disk demo directly after compilation:
 
-Every screen loads its background image from an absolute, machine-specific path:
-
-```java
-I1 = new ImageIcon("E:\\Documents\\4th semester\\OS\\untitled\\src\\gui\\os_background.jpeg");
+```powershell
+java -cp ".;jfreechart-1.5.6.jar" DiskSchedulingSimulation
 ```
 
-This path exists only on the original author's machine and **will not resolve on any other computer**. Before running, either:
-- Recreate that exact directory structure and drop `os_background.jpeg` there, **or**
-- Update each occurrence (in `Main.java`, `Scheduler.java`, `RT_Scheduler.java`, `main_interface.java`, `PriorityGui.java`, `Console.java`, `Table.java`) to a relative path such as `"os_background.jpeg"` (the file already ships at the project root).
+The commands use Windows classpath separators (`;`). Compilation writes
+`.class` files into the project directory.
 
-An `ImageIcon` pointed at a missing file won't throw — the label will simply render blank — so the app will still run, just without the background artwork, if you skip this step.
+## Screenshots
 
----
+All links below are relative to the repository root.
 
-## Known Issues & Limitations
+### Main dashboard
 
-- **Hardcoded absolute file paths** to `os_background.jpeg` scattered across nearly every GUI class (see above).
-- **No build tooling** — no `pom.xml`/`build.gradle`; JFreeChart must be added to the classpath manually.
-- **No packages** — all classes sit in the default package, so filenames must stay unique and the whole project must be compiled/run from one directory.
-- **Dead/unused code**:
-  - `RealTimeSchedulingGUI.java` is an empty stub.
-  - `PriorityGui.java` appears to be an earlier, superseded version of `main_interface.java`'s priority flow — it's not reachable from `Main`.
-  - `Task.java` (a `Runnable`-based periodic task model) is not referenced anywhere else in the codebase.
-  - `MIPS_ISA.java` is unrelated scratch code (a MIPS instruction-decoding stub) with no connection to the scheduler/disk simulator.
-  - In `Console.java`'s real-time constructor, the "Progress Bar" button's `ActionListener` body is entirely commented out — clicking it does nothing.
-- **Disk scheduling correctness**: `C-SCAN`, `LOOK`, and `C-LOOK` currently share the same sort/service order as `SCAN` in `generateRequestsAndStart` — `handleMovingDirection()` only toggles a `movingUpward` flag that isn't actually used to reorder or wrap the request queue, so the four "directional" algorithms are not yet behaviorally distinct from one another.
-- **String comparisons use `==` instead of `.equals()`** in several places (e.g. `main_interface.java`, `Table.java` — `selectedItem=="FCFS"`), which works today only because `JComboBox` returns interned string literals from the same array; it's fragile and not idiomatic Java.
-- **Round Robin quantum is hardcoded** (`qt = 3`) in both `Table.java` and `ProgressBar.java` rather than being user-configurable.
-- **`Execution.java`'s Gantt table caps at 90 time units** (`new String[90]`) — longer-running real-time simulations will throw an `ArrayIndexOutOfBoundsException` once `currentTime` exceeds that.
-- **No input validation** on the text fields (`Integer.parseInt` on raw user input) — non-numeric input will throw an unhandled `NumberFormatException`.
-- **Simulations run indefinitely**: `Execution.java`'s RMS/EDF loops (`while (true)`) never terminate on their own; the window must be closed manually.
+![Main dashboard](./os-main-dashboard.png)
 
----
+### CPU process scheduler
 
-## Possible Improvements
+![CPU process scheduler](./os-process-scheduler.png)
 
-- Migrate to a Maven/Gradle project with JFreeChart declared as a managed dependency.
-- Replace hardcoded absolute image paths with classpath-relative resource loading (`getClass().getResource(...)`).
-- Implement true SCAN/C-SCAN/LOOK/C-LOOK direction-aware request ordering (elevator algorithm) instead of a static sort.
-- Replace `==` string comparisons with `.equals()`/an `enum` for algorithm selection.
-- Add input validation and user-facing error dialogs instead of letting exceptions propagate.
-- Make the Round Robin time quantum and disk simulation constants (`MAX_CYLINDER`, `REQUEST_COUNT`, `HEAD_POSITION`) user-configurable from the UI.
-- Remove or finish the dead code (`RealTimeSchedulingGUI`, `PriorityGui`, `Task`, `MIPS_ISA`) to keep the codebase focused on the scheduler/disk-simulator scope.
-- Add automated unit tests for the scheduling algorithms' metric calculations (waiting time, turnaround time, deadline misses).
+### CPU scheduling results
+
+![CPU scheduling output](./os-process-scheduler-output.png)
+
+### Additional UI screenshots
+
+![Progress bar view](./ProgressBar.png)
+
+![Scheduling view](./schedule.png)
+
+![Table view](./table.png)
+
+![Input form](./textfield_color.png)
+
+## Testing
+
+No automated test suite or test/build configuration is present in the project
+files. No automated test results are claimed here. A basic manual check is to
+compile all source files with the command above, launch `Main`, and open the CPU
+and disk screens. CPU results can be inspected in the table and Gantt chart;
+the disk chart can be observed while it services its generated requests.
+
+## Known limitations
+
+- There is no Maven/Gradle build configuration; compile and run from the project
+  root with the bundled JFreeChart JAR on the classpath.
+- Several Swing screens load `os_background.jpeg` from an absolute path on the
+  original development machine. The image is included, but those screens may
+  show no background elsewhere.
+- The CPU results view handles arrival times for SJF and Round Robin. However,
+  the input form does not ask for arrival times for Round Robin and assigns
+  incrementing values internally. The progress-bar Round Robin scheduler does
+  not process arrivals as they occur. The progress-bar SJF and Priority paths
+  sort their process list without selecting only arrived processes.
+- The Priority input form displays an arrival-time field, but its current
+  handler does not read that field when creating a process; processes therefore
+  use the default arrival time in the CPU results view.
+- The disk SSTF option sorts requests by distance from the initial head
+  position, rather than recalculating the nearest request after every seek.
+  SCAN, C-SCAN, LOOK, and C-LOOK currently use the same ascending request
+  ordering; their direction/wrap behavior is not implemented as distinct
+  algorithms.
+- The real-time scheduler runs continuously and its Gantt chart has a fixed
+  number of time columns. The real-time Progress Bar button is not wired to an
+  action.
+- The input forms parse text directly as integers and do not provide complete
+  validation for invalid or empty input.
+
+## Attribution and license
+
+The files in this project snapshot do not identify an original author or
+upstream repository, and no `LICENSE` file is present. The local Git history
+does not establish the original source attribution. Accordingly, this README
+does not assign authorship or claim a license. Confirm the original source and
+its licensing terms before redistribution or reuse.
